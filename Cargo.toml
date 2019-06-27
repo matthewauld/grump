@@ -1,0 +1,8 @@
+[package]
+name = "grump"
+version = "0.1.0"
+authors = ["Matthew Auld <matthew@matthewauld.ca>"]
+edition = "2018"
+
+[dependencies]
+regex = "1"
