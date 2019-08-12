@@ -1,5 +1,4 @@
 
-#[macro_use]
 extern crate structopt;
 extern crate glob;
 use structopt::StructOpt;
@@ -7,6 +6,7 @@ use pulldown_cmark::Options;
 use std::path::PathBuf;
 mod file_tree;
 mod site_builder;
+mod templates;
 
 
 #[derive(Debug, StructOpt)]
@@ -33,13 +33,10 @@ struct Opt {
 
 
 fn main(){
-    println!("{}",PathBuf::from(".").is_dir());
     // get command line arguments
     let opt = Opt::from_args();
-    println!("{:?}",opt);
     // create file tree
-    let root = file_tree::Directory::new(&opt.target.to_str().unwrap()).expect("Target directory not found");
-    println!("{:?}",root);
+    let root = file_tree::Directory::new(&opt.target).expect("Target directory not found");
     let mut ignore = Vec::new();
     for elem in opt.ignore.split(' '){
         ignore.push(glob::Pattern::new(elem).unwrap());
@@ -54,7 +51,6 @@ fn main(){
     let style: PathBuf = match opt.style {
         None => {
             let possible_file = opt.target.clone().join("style.css");
-            println!("{:?}",possible_file);
             if possible_file.exists() && possible_file.is_file() {
                 use_style = true;
             }
@@ -96,6 +92,7 @@ fn main(){
     c.insert(Options::ENABLE_FOOTNOTES);
 
     let config =  site_builder::Config {
+        site_name: String::from(opt.target.canonicalize().unwrap().file_name().unwrap().to_str().unwrap()),
         cmark_options: c,
         include_style: use_style,
         style_path: style,
@@ -107,4 +104,6 @@ fn main(){
     };
     println!("{:?}",config);
     site_builder::build_item(file_tree::FileSystemItem::DirEntry(root),&config);
+
+
 }

@@ -27,8 +27,9 @@ use std::fs;
     }
 
     impl Directory {
-        pub fn new(dir_path: &str)->std::io::Result<Directory> {
-            let mut filename = path::Path::new(dir_path).file_name().unwrap_or(std::ffi::OsStr::new(".")).to_str().unwrap();
+        pub fn new(dir_path: &path::PathBuf)->std::io::Result<Directory> {
+            let long_path = dir_path.canonicalize()?;
+            let mut filename = long_path.file_name().unwrap_or(std::ffi::OsStr::new(".")).to_str().unwrap();
             let hidden: bool;
             if filename.starts_with(".")&& filename!="."{
                 filename = without_first(&filename);
@@ -48,23 +49,30 @@ use std::fs;
                 let target = entry.unwrap();
                 let t = target.file_type()?;
                 if t.is_dir(){
-                    new_dir.children.push(FileSystemItem::DirEntry(Directory::new(target.path().to_str().unwrap())?));
+                    new_dir.children.push(FileSystemItem::DirEntry(Directory::new(&target.path())?));
                 } else if t.is_file() {
-                    new_dir.children.push(FileSystemItem::FileEntry(File::new(target.path().to_str().unwrap())?));
+                    new_dir.children.push(FileSystemItem::FileEntry(File::new(&target.path())?));
                 }
             }
         return Ok(new_dir);
         }
         pub fn generate_html_menu(&self, ignore: &Vec<glob::Pattern>) -> String {
             let child_string = self.children.iter().fold(String::new(),|acc, x| acc + &x.generate_submenu(ignore, &self.path).unwrap_or(String::new()));
-            format!("<nav><div><a href=\"/\">{}</a></div><ul>{}</ul></nav>",self.name,child_string)
+            format!("<nav><div><a href=\"/\">Home</a></div><ul>{}</ul></nav>",child_string)
         }
 
         pub fn generate_directory_menu(&self) -> String {
             let child_string: String = self.children.iter().fold(String::new(), |acc, x| {
                 match x {
                     FileSystemItem::DirEntry(dir) => acc + &format!("<li><a href=\"{}\">{}</li>",&dir.name, dir.path.strip_prefix(&self.path).unwrap().to_str().unwrap()),
-                    FileSystemItem::FileEntry(file) => acc + &format!("<li><a href=\"{}\">{}</li>",file.name, file.path.strip_prefix(&self.path).unwrap().to_str().unwrap())
+                    FileSystemItem::FileEntry(file) => {
+                        match file {
+                            file if file.name == "index.html" => acc,
+                            file if file.extension == "html" => acc + &format!("<li><a href=\"{}\">{}</li>", file.path.strip_prefix(&self.path).unwrap().to_str().unwrap(),&file.name[0..file.name.len()-5]),
+                            file => acc + &format!("<li><a href=\"{}\">{}</li>", file.path.strip_prefix(&self.path).unwrap().to_str().unwrap(),file.name)
+                        }
+
+                    }
                 }
             });
             return format!("<ul>{}</ul>",child_string)
@@ -74,10 +82,10 @@ use std::fs;
     }
 
     impl File {
-        pub fn new(file_path: &str)->std::io::Result<File> {
-            let filename_path = path::Path::new(file_path);
-            let mut filename  = filename_path.file_name().unwrap_or(std::ffi::OsStr::new("")).to_str().unwrap();
-            let extension = filename_path.extension().unwrap_or(std::ffi::OsStr::new("")).to_str().unwrap();
+        pub fn new(file_path: &path::PathBuf)->std::io::Result<File> {
+            let long_path = file_path.canonicalize()?;
+            let mut filename  = long_path.file_name().unwrap_or(std::ffi::OsStr::new("")).to_str().unwrap();
+            let extension = file_path.extension().unwrap_or(std::ffi::OsStr::new("")).to_str().unwrap();
             let hidden: bool;
             if filename.starts_with("."){
                 filename = without_first(&filename);
@@ -108,7 +116,7 @@ use std::fs;
                         let i:usize  = x.name.rfind('.').unwrap_or(x.path.to_str()?.len());
                         let name = String::from(&x.name[0..i]);
 
-                        //remove the first folder from  TODO: replace with strip prefex
+                        //remove the first folder from
                         let link = String::from("/") + x.path.strip_prefix(root).unwrap().to_str().unwrap_or("/");
                         Some(format!("<li><a href=\"{}\">{}</a></li>",&link, name))
                     } else {
@@ -118,7 +126,7 @@ use std::fs;
 
                 FileSystemItem::DirEntry(x)=>{
                     if !x.hidden && !should_ignore(&x.path,&ignore) {
-                        //remove the first folder
+                        //remove the root path
                         let link = String::from("/") + x.path.strip_prefix(root).unwrap().to_str().unwrap_or("/");
                         Some(format!("<li><a href=\"{}\">{}</a><ul>{}</ul></li>",&link,&x.name,x.children.iter().fold(String::new(),|acc, x| acc + &x.generate_submenu(ignore, root).unwrap_or(String::new()))))
                     } else {

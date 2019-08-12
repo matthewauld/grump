@@ -19,6 +19,7 @@ pub struct Config {
     pub menu: String,
     pub force: bool,
     pub ignore: Vec<glob::Pattern>,
+    pub site_name: String,
 }
 
 //TODO, use paths isntead of strings
@@ -32,6 +33,7 @@ impl Config{
         c.insert(Options::ENABLE_TASKLISTS);
         c.insert(Options::ENABLE_FOOTNOTES);
         return Config{
+            site_name: String::from(target.path.canonicalize().unwrap().file_name().unwrap().to_str().unwrap()),
             cmark_options: c,
             include_style: true,
             style_path: path::PathBuf::from("/style.css"),
@@ -73,6 +75,7 @@ pub fn build_item(root: file_tree::FileSystemItem, config: &Config){
 }
 pub fn build_default_index(item: &file_tree::Directory, config: &Config) -> std::io::Result<()>{
     let mut output = String::from("<html><head>");
+    output.push_str(&format!("<title>{}</title>",config.site_name));
     if config.include_style {
         let p = &config.style_path.to_str().unwrap();
         output.push_str(&format!(" <link rel=\"stylesheet\" type=\"text/css\" href=\"{}\">", p));
@@ -104,6 +107,7 @@ pub fn process_markdown_file(file: file_tree::File, config: &Config)->std::io::R
     //add beginning
     output.push_str("<!DOCTYPE html><html><head>");
     //add style
+    output.push_str(&format!("<title>{}</title>",config.site_name));
     if config.include_style {
         let p = &config.style_path.to_str().unwrap();
         output.push_str(&format!(" <link rel=\"stylesheet\" type=\"text/css\" href=\"{}\">", p));
@@ -114,12 +118,13 @@ pub fn process_markdown_file(file: file_tree::File, config: &Config)->std::io::R
         output.push_str(&format!("<script type = \"text/javascript\" src = \"{}\" ></script>",p));
     }
     output.push_str("</head><body>");
+
     //add body
     let mut f = File::open(file.path)?;
     f.read_to_string(&mut input)?;
     let parser = Parser::new_ext(&input, config.cmark_options);
-    //TODO: Add menu logic
 
+    //TODO: Add menu logic
     html::push_html(&mut output, parser);
     let output = output.replace("{{MENU}}",&config.menu);
     //add end
@@ -131,7 +136,7 @@ pub fn process_markdown_file(file: file_tree::File, config: &Config)->std::io::R
 }
 
 
-pub fn build_site(target:&str){
+pub fn build_site(target:&path::PathBuf) {
     let dir = file_tree::Directory::new(target).expect("Target directory not found");
     let config = Config::new(&dir);
     let root = file_tree::FileSystemItem::DirEntry(dir);
